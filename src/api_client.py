@@ -80,16 +80,6 @@ class D5gBlockchainClient:
         except BaseException:
             return None
 
-    # gets just the newest block - used to get the block hash and number for deterministic 
-    # psuedo-random seed
-    def get_latest_block(self):
-        try:
-            result = self._send_request('blocks?limit=1'),
-            y = yaml.safe_load(result[0])  
-            return y['data'][0]
-        except BaseException as err:
-            raise D5gException(err) from err
-
     # from xo tp example but unused currently
     def _get_status(self, batch_id, wait, auth_user=None, auth_password=None):
         try:

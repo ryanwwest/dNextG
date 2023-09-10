@@ -32,8 +32,6 @@ class UpNodeReputationState:
             # default to 5, can go to 0 or 10 depending on behavior
             # node's own reputation will be ignored by UE and is set to -9
             self.reputations = {str(x): 5 for x in range(1,num_nodes+1)}
-            # todo this should ideally have its own field, not share the dict with rep vals
-            self.reputations['nid_reporter'] = str(cur_node_num)
             # self.reputations[str(cur_node_num)] = val_if_self_reference
         elif prev_state is not None:
             self.reputations = prev_state
@@ -67,8 +65,6 @@ class D5gNodeState:
         # any other transaction that belongs to this address/node, reject it
         if self.rep_state_cache is None:
             self.load_data(self.pubkey)
-        if int(self.rep_state_cache.reputations['nid_reporter']) != int(payload.nid):
-            raise Exception(f"Payload nid {payload.nid} does not match state reputation reporter nid {self.rep_state_cache.reputations['nid_reporter']}.")
         for nid, connection_verified in payload.tested_nodes.items():
             # don't change value of node's own reputation - this gets ignored
             if self.rep_state_cache.reputations[nid] == val_if_self_reference:

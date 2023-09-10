@@ -3,9 +3,9 @@ from flask import Flask
 from webbrowser import get
 from api_client import D5gBlockchainClient
 from tp.d5g_payload import D5gUpPayload
+import templater
 import requests
 import json
-from templater import get_node_number, get_num_decentralized_nodes
 
 app = Flask(__name__)
 
@@ -79,7 +79,7 @@ def get_node_pubkey():
 def get_all_node_pubkeys(number_of_nodes):
     global all_node_pubkeys
     pubkeys = {}
-    this_node = get_node_number()
+    this_node = templater.get_node_number()
     for i in range(number_of_nodes):
         if i+1 == this_node:
             pubkeys[i+1] = str(get_node_pubkey()).strip()
@@ -92,5 +92,4 @@ def get_all_node_pubkeys(number_of_nodes):
 
 
 if __name__ == '__main__':
-    network_node_count = get_num_decentralized_nodes()
     app.run(host="0.0.0.0", port=12222, debug=True)

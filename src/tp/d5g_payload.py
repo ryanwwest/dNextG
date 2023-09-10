@@ -17,18 +17,6 @@ class D5gUpPayload:
             raise InvalidTransaction('Missing timestamp')
         self.timestamp = j['timestamp']
 
-        # the public key that signed the txn, not this, should be used to verify who 
-        # actually sent the payload. This isn't verified.
-        if not 'nid' in j:
-            raise InvalidTransaction('Missing nid')
-        self.nid = j['nid']
-
-        # needed to verify the random seed used for test selection (and tracking how 
-        # often nodes report)
-        if not 'seedblock' in j:
-            raise InvalidTransaction('Missing seedblock')
-        self.seedblock = j['seedblock']
-
         self.as_bytes = payload
 
     @staticmethod

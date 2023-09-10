@@ -1,149 +1,262 @@
 #!/usr/bin/python
 
+import os
+
 import geni.portal as portal
 import geni.urn as URN
 import geni.rspec.pg as rspec
 import geni.rspec.emulab.pnext as PN
 import geni.rspec.igext as IG
+import geni.rspec.emulab.spectrum as spectrum
 
 scripts_dir = "/local/repository/bin/"
 
-def invoke_script_str(filename, args_str, sudo=False):
+# derived from https://gitlab.flux.utah.edu/dmaas/oai-indoor-ota.git
+BIN_PATH = "/local/repository/bin"
+ETC_PATH = "/local/repository/etc"
+D5G_IMG = "urn:publicid:IDN+emulab.net+image+PowderSandbox:d5g.node"
+LOWLAT_IMG = "urn:publicid:IDN+emulab.net+image+PowderTeam:U18LL-SRSLTE"
+UBUNTU_IMG = "urn:publicid:IDN+emulab.net+image+emulab-ops//UBUNTU18-64-STD"
+COTS_UE_IMG = "urn:publicid:IDN+emulab.net+image+PowderTeam:cots-base-image"
+COMP_MANAGER_ID = "urn:publicid:IDN+emulab.net+authority+cm"
+# old hash from branch bandwidth-testing-abs-sr-bsr-multiple_ue
+#TODO: check if merged to develop or develop now supports multiple UEs
+DEFAULT_NR_RAN_HASH = "509168255153690397626d85cdd4c4aec0859620" # 2022.wk26
+DEFAULT_NR_CN_HASH = "v1.2.1"
+OAI_DEPLOY_SCRIPT = os.path.join(BIN_PATH, "deploy-oai.sh")
+
+
+
+
+
+
+
+
+def invoke_script_str(filename):
     # populate script config before running scripts (replace '?'s)
     #populate_config = "sed -i 's/NUM_UE_=?/NUM_UE_=" + str(params.uenum) + "/' " + GLOBALS.SCRIPT_DIR+GLOBALS.SCRIPT_CONFIG
     #populate_config2 = "sed -i 's/UERANSIM_BRANCHTAG_=?/UERANSIM_BRANCHTAG_=" + str(params.ueransim_branchtag) + "/' " + GLOBALS.SCRIPT_DIR+GLOBALS.SCRIPT_CONFIG
     # also redirect all output to /script_output
-    run_script = "bash " + scripts_dir + filename + " " + args_str + " &> ~/" + filename + ".log"
-    if sudo:
-        run_script = "sudo " + run_script
+    run_script = "sudo bash " + scripts_dir + filename + " &> ~/" + filename + "_output"
     #return populate_config + " && " + populate_config2 + " && " +  run_script
     return run_script
 
 pc = portal.context
-request = pc.makeRequestRSpec()
+
+
+
 
 # Parameters
+
+node_types = [
+    ("d430", "Emulab, d430"),
+    ("d740", "Emulab, d740"),
+]
+
 pc.defineParameter("phystype",  "Optional physical node type",
-                   portal.ParameterType.STRING, "d430",
-                   longDescription="Specify a physical node type (e.g., d430, d740, d840; NOT d820 or d710) " +
-                   "instead of letting the resource mapper choose for you.")
-pc.defineParameter("phystype_array",  "Optional physical node type for every node",
                    portal.ParameterType.STRING, "",
-                   longDescription="In case of node unavailability using one type, can specify multiple types in comma-separated order node-0,node-1,... here (example: d430,d430,d430,d430,d740).")
+                   longDescription="Specify a physical node type (d430,d740,d840, NOT d820) " +
+                   "instead of letting the resource mapper choose for you.")
 pc.defineParameter(
-    "nodeCount","Number of Nodes",
+		"nodeCount","Number of Nodes",
     portal.ParameterType.INTEGER,5,
-    min=5, max=255,
-    longDescription="Number of nodes to spin up, all with the same installations. All but one of these will be decentralized nodes; 10.10.1.1 is always the centralized 5G Core (control plane) node.")
+    longDescription="Number of nodes to spin up, all with the same installations.")
+
+pc.defineParameter(
+    name="sdr_nodetype",
+    description="Type of compute node paired with the SDRs",
+    typ=portal.ParameterType.STRING,
+    defaultValue=node_types[1],
+    legalValues=node_types
+)
+
+pc.defineParameter(
+    name="cn_nodetype",
+    description="Type of compute node to use for CN node (if included). Overrides optional physical node type.",
+    typ=portal.ParameterType.STRING,
+    defaultValue=node_types[0],
+    legalValues=node_types
+)
+
+# pc.defineParameter(
+#     name="oai_ran_commit_hash",
+#     description="Commit hash for OAI RAN",
+#     typ=portal.ParameterType.STRING,
+#     defaultValue="",
+#     advanced=True
+# )
+# 
+# pc.defineParameter(
+#     name="oai_cn_commit_hash",
+#     description="Commit hash for OAI (5G)CN",
+#     typ=portal.ParameterType.STRING,
+#     defaultValue="",
+#     advanced=True
+# )
+
+pc.defineParameter(
+    name="sdr_compute_image",
+    description="Image to use for compute connected to SDRs",
+    typ=portal.ParameterType.STRING,
+    defaultValue="",
+    advanced=True
+)
+
+indoor_ota_x310s = [
+    ("ota-x310-1",
+     "USRP X310 #1"),
+    ("ota-x310-2",
+     "USRP X310 #2"),
+    ("ota-x310-3",
+     "USRP X310 #3"),
+    ("ota-x310-4",
+     "USRP X310 #4"),
+]
+pc.defineParameter(
+    name="x310_radio",
+    description="X310 Radio (for OAI gNodeB)",
+    typ=portal.ParameterType.STRING,
+    defaultValue=indoor_ota_x310s[0],
+    legalValues=indoor_ota_x310s
+)
+
+portal.context.defineStructParameter(
+    "freq_ranges", "Frequency Ranges To Transmit In",
+    defaultValue=[{"freq_min": 3550.0, "freq_max": 3600.0}],
+    multiValue=True,
+    min=0,
+    multiValueTitle="Frequency ranges to be used for transmission.",
+    members=[
+        portal.Parameter(
+            "freq_min",
+            "Frequency Range Min",
+            portal.ParameterType.BANDWIDTH,
+            3550.0,
+            longDescription="Values are rounded to the nearest kilohertz."
+        ),
+        portal.Parameter(
+            "freq_max",
+            "Frequency Range Max",
+            portal.ParameterType.BANDWIDTH,
+            3600.0,
+            longDescription="Values are rounded to the nearest kilohertz."
+        ),
+    ]
+)
+
+
 params = pc.bindParameters()
 pc.verifyParameters()
-
+request = pc.makeRequestRSpec()
 link = request.Link("link")
-if params.phystype_array is not '':
-    node_types = params.phystype_array.split(',')
+link.bandwidth = 10*1000*1000
+
+def x310_node_pair(idx, x310_radio):
+    role = "nodeb"
+    #node = request.RawPC("{}-gnb-comp".format(x310_radio))
+    node = request.RawPC("node-1")
+    node.component_manager_id = COMP_MANAGER_ID
+    node.hardware_type = params.sdr_nodetype
+
+    if params.sdr_compute_image:
+        node.disk_image = params.sdr_compute_image
+    else:
+        node.disk_image = LOWLAT_IMG
+
+    node_radio_if = node.addInterface("usrp_if")
+    # node_radio_if.addAddress(rspec.IPv4Address("192.168.40.1",
+#                                               "255.255.255.0"))
+
+    radio_link = request.Link("radio-link-{}".format(idx))
+    radio_link.bandwidth = 10*1000*1000
+    radio_link.addInterface(node_radio_if)
+
+    radio = request.RawPC("{}-gnb-sdr".format(x310_radio))
+    radio.component_id = x310_radio
+    radio.component_manager_id = COMP_MANAGER_ID
+    radio_link.addNode(radio)
+
+    nodeb_cn_if = node.addInterface("nodeb-cn-if")
+    # nodeb_cn_if.addAddress(rspec.IPv4Address("192.168.1.{}".format(idx + 1), "255.255.255.0"))
+    link.addInterface(nodeb_cn_if)
+    bs = node.Blockstore("bs{}".format(i), "/z")
+    bs.size = "20GB"
+
+    cmd = "{} '{}' {}".format(OAI_DEPLOY_SCRIPT, DEFAULT_NR_RAN_HASH, role)
+    node.addService(rspec.Execute(shell="bash", command=cmd))
+    node.addService(rspec.Execute(shell="bash", command="/local/repository/bin/tune-cpu.sh"))
+    node.addService(rspec.Execute(shell="bash", command="/local/repository/bin/tune-sdr-iface.sh"))
+    node.addService(rspec.Execute(shell="bash", command=invoke_script_str("install-5g.sh")))
+    node.addService(rspec.Execute(shell="bash", command=invoke_script_str("install-sawtooth.sh")))
+
+def b210_nuc_pair(b210_node):
+    node = request.RawPC("{}-cots-ue".format(b210_node))
+    node.component_manager_id = COMP_MANAGER_ID
+    node.component_id = b210_node
+    node.disk_image = COTS_UE_IMG
+    node.addService(rspec.Execute(shell="bash", command="/local/repository/bin/module-off.sh"))
+
+
+
+# node definitions
+
 for i in range(0,params.nodeCount):
+    # single real gNB
+    if i == 1:
+        x310_node_pair(1, params.x310_radio)
+        continue
     nodename = "node-%d" % (i,)
     node = request.RawPC(nodename)
-    node.disk_image = "urn:publicid:IDN+emulab.net+image+PowderSandbox:d5g.node"
-    if len(params.phystype_array.split(',')) > i:
-        node.hardware_type = params.phystype_array.split(',')[i]
-    else:
-        node.hardware_type = "d430" if params.phystype == "" else params.phystype
-    
-    dnodes = params.nodeCount - 1
-    node.addService(rspec.Execute(shell="bash", command=invoke_script_str("install-5g.sh", str(dnodes), sudo=True)))
-    node.addService(rspec.Execute(shell="bash", command=invoke_script_str("install-sawtooth.sh", str(dnodes))))
+    node.component_manager_id = COMP_MANAGER_ID
+    node.disk_image = D5G_IMG
+    node.hardware_type = "d430" if params.phystype == "" else params.phystype
+    # cn node may have different type
+    if i == 0 and params.cn_nodetype != "":
+        node.hardware_type = params.cn_nodetype
+    node.addService(rspec.Execute(shell="bash", command=invoke_script_str("install-5g.sh")))
+    node.addService(rspec.Execute(shell="bash", command=invoke_script_str("install-sawtooth.sh")))
     bs = node.Blockstore("bs{}".format(i), "/z")
-    bs.size = "60GB"
+    bs.size = "20GB"
     link.addNode(node)
+
+
+
+# require all indoor OTA nucs to prevent interference
+for b210_node in ["ota-nuc1", "ota-nuc2", "ota-nuc3", "ota-nuc4"]:
+    b210_nuc_pair(b210_node)
+
+for frange in params.freq_ranges:
+    request.requestSpectrum(frange.freq_min, frange.freq_max, 0)
 
 
 # README info
 
-# node 0 being the centralized node cannot easily change as 10.10.1.1 is hardcoded in many areas
 tourDescription = """
-# dNextG: A Zero-Trust Decentralized Mobile Network User Plane (also known as D5G in this 5G prototype)
+# dNextG (outdated branch)
 
-This profile instantiates an experiment that runs a simulated 5G RAN and Core network on Docker, along with a Hyperledger Sawtooth validator node and an Orchestrator program that sits between them. It will eventually include several nodes.
+This should only be used if attempting to run dNextG with COTS UEs, and must be manually set up (which will probably be difficult).
 
-This implementation uses 4 or more decentralized nodes (nodes 1-4+), which is the minimum number of nodes required for PBFT and also the maximum number of DNNs supported by OAI (in the version used). Each of these nodes runs a gNB, a UPF, a Hyperledger Sawtooth blockchain Validator, and various reputation scripts. There is also one 5G Core control plane node, node-0, which runs the AMF, SMF, AUSF, UDM, UDR, and NRF.
+### D5G - Decentralized 5G
 
-If you want to experiment with an automatically configured setup, use the `master` branch when instantiating an experiment, which will set up simulated gNBs and UEs. The `cots-ue` branch instantiates real COTS UEs and gNBs if you have reserved proper spectrum during the experiment time, but its setup is *not* automated using the steps below and is not ready for easy experimentation.
+This profile instantiates an experiment that runs a simulated 5G RAN and Core 
+network on Docker, along with a Hyperledger Sawtooth validator node and an Orchestrator
+program that sits between them. It will eventually include several nodes.
 """
 
 tourInstructions = """
-Node 0 is the centralized node running the 5G Core, and all remaining nodes are decentralized nodes running gNBs, UPFs, and dNextG processes. When the paper was submitted for publication in 2023-06, this POWDER experiment would automatically run scripts `bin/install-5g.sh` and `bin/install-sawtooth.sh` which installed the 5G core on node 0, UPFs and gNBs and Sawtooth validators on all remaining nodes, and automatically started and connected all of these processes together and started the dNextG reputation system. As OAI and Hyperledger frequently update their software versions/URLs, these scripts are prone to breakage with time and may need tweaks - the output logs of these automatically-run scripts are found in the home directory.
+Start the Validator (must start many background processes)
 
-The easiest way to check the dNextG reputation state (on the Hyperledger Sawtooth ledger) is by running the following command on any decentralized node (any node except node-0):
-```
-sudo sawtooth block list | head -2 && sudo sawtooth transaction list | head | grep --only-matching "'{.*$"
-```
+sudo -u sawtooth sawtooth-validator -vv &
+sudo -u sawtooth settings-tp -v &
+sudo -u sawtooth devmode-engine-rust -vv --connect tcp://localhost:5050 &
+sudo -u sawtooth intkey-tp-python -v &
+sudo -u sawtooth sawtooth-rest-api -v
 
-Each row (starting at the third line of output) represents a psuedo-UE test result of a node that tested 3 other nodes by their node IDs. If all test results are 'false', then all reputation tests are failing which could indicate something is wrong with the 5G Core (on node-0) - check the docker logs of the Core VNFs running on node-0 (and if no containers are running/created, see if the install script failed by looking at its logs at ~/install-sawtooth.sh.log). If the tests of only one particular node id (or 'nid') tests are failing, this could indicate a problem with the UPF or gNB of that node - the UPF can also be checked with docker and the gNB PID status can be checked with `ps aux | grep nr-softmodem`. The autorun install scripts provide the best indications of how to (re)start any of these services. As a hint, the auto-configured docker-compose YAML files are found in `/z/oai-cn5g-fed/docker-compose/` as `cp.yaml` and `upf.yaml` for node-0 and all other nodes, respectively.
+To delete the blockchain data, remove all files from /var/lib/sawtooth.
+To delete the Sawtooth logs, remove all files from /var/log/sawtooth/.
+To delete the Sawtooth keys, remove the key files /etc/sawtooth/keys/validator.\* and /home/yourname/.sawtooth/keys/yourname.\*.
 
-
-If the scripts do not automatically install and start all components so that decentralized nodes are testing each other's UPFs and sharing results with the blockchain, the following steps of manual installtion are slightly oudated but still may come in handy:
-
-First wait until all nodes' startup installation scripts have finished (no more than ~50 minutes). Then, on each of the 4 decentralized nodes (1-4), follow the "Sawtooth PBFT Steps" below. Finally, on all 5 nodes follow the "5G" steps below (note that these instructions vary for node 0 vs nodes 1-4). These two sets of tasks result in the full dNextG network operating correctly (simulated version), and you may want to use `/local/repository/src/persistent-ue.py` to simulate a real user connecting to it.
-
-### Sawtooth PBFT Steps
-
-First, bootstrap with one only node (could be any; I usually pick node-1)
-```
-sudo pkill -f sawtooth -9; sudo pkill -f settings-tp -9; cd /local/repository/bin && sudo bash install-sawtooth.sh && sudo bash setup-pbft.sh --bootstrap
-```
-
-Afterwards, run the following on all others (don't run install-sawtooth.sh again or it will mess up keys)
-```
-sudo pkill -f sawtooth -9; cd /local/repository/bin/ && sudo bash setup-pbft.sh
-```
-
-### 5G Steps
-
-#### 5-node setup (with 4 decentralized nodes): 
-node 0 / 10.10.1.1 is the CP (Control Plane) node. Adding more than 4 nodes will not work since OAI doesn't let you use more than 4 DNNs, and requires waiting for that to increase or implementing UPF selection via network slicing.
-
-For initial setup only (NOT restarting things):
-
-1. On node-0, run the following to start the core plane
-```
-cd /local/repository/bin/ && sudo docker rm -f $(sudo docker ps -a -q); sudo bash gen-configs.sh; cd /z/oai-cn5g-fed/docker-compose/ && sudo docker-compose -f cp.yaml up -d && sudo docker logs -f oai-amf
-```
-2. On nodes 1-4, start their gNBs - this script now runs the templater script and starts it in a way that it will restart if exit or certain STDERR message appears (so you never have to touch these panes again even if the core crashes):
-```
-cd /local/repository/bin/ && sudo bash start-gnb.sh
-```
-3. On nodes 1-4, start their UPFs (and set up other necessary configs):
-```
-cd /local/repository/bin/ && sudo docker rm -f $(sudo docker ps -a -q) && sudo bash gen-configs.sh; sudo iptables -t nat -A POSTROUTING -o eno1 -j MASQUERADE && cd /z/oai-cn5g-fed/docker-compose/ && sudo docker-compose -f upf.yaml up -d && sudo docker logs -f oai-spgwu
-```
-4. On nodes 1-4, start the reputation monitor programs which will test other nodes' UPFs and publish transactions to Sawtooth:
-```
-cd /local/repository/src && sudo python3 monitor.py
-```
-Or run testupf.sh for a one-time psuedo-UE test (no publishing to Sawtooth):
-```
-cd /local/repository/bin && sudo bash testupf.sh /local/repository/etc/ue-node2.conf
-```
-
-After setup is complete, helpful commands:
-- Run `sudo docker rm -f $(sudo docker ps -a -q)` to stop all containers.
-- Restart a UPF node: `cd /z/oai-cn5g-fed/docker-compose/ && sudo docker rm -f $(sudo docker ps -a -q); sudo docker-compose -f upf.yaml up -d && sudo docker logs -f oai-spgwu`.
-- Restart the node 0's core control plane (all VNFs): `cd /z/oai-cn5g-fed/docker-compose/ && sudo docker rm -f $(sudo docker ps -a -q); sudo docker-compose -f cp.yaml up -d && sudo docker logs -f oai-amf`.
-
-# Known Issues 
-
-- It is unlikely but possible that the AMF and/or SMF can potentially stop processing traffic after 1+ hours. Restarting node 0's core control plane using the above command fixes it. Note that the gNB command used above will automatically handle reconnecting each gNB to the core, but the UPF (spgwu) command may not always automatically reconnect, so restarting each UPF node using the above command is also required.
-- The persistent-ue.py 'real UE' simulation OAI UE starting thread may occasionally hang and need restarting (or waiting for a few minutes). Cause not yet identified.
-- On very rare occasions, one or more nodes lose Sawtooth ledger consensus (only observed after 800+ blocks). The simplest fix is usually rerunning the "Sawtooth PBFT Steps" which wipes the ledger, though you can attempt to reconnect the out-of-sync node if you desire to maintain the ledger state.
-- node-0 (and other nodes) has a small disk space which fills up from logs (check current usage with `df`). If this happens, you can clear disk space with the below command, then restart the control plane VNFs using the 'helpful command' above.
-
-```
-sudo docker rm -f $(sudo docker ps -a -q); sudo docker system prune --force
-sudo docker volume rm $(sudo docker volume ls -q)
-sudo rm -rf /usr/local/share/uhd /tmp/* 
-```
-
+More: https://sawtooth.hyperledger.org/docs/core/nightly/1-2/app_developers_guide/ubuntu.html
 """
 
 tour = IG.Tour()

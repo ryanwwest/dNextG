@@ -1,0 +1,44 @@
+replace docker_compose/oai_db2.sql with etc/ version (because adds the COTS UE subscriptions)
+
+the ota-nuc#-cots-ue 'Startup' column failues "Exit (126)" aren't actually an issue, just a file permissions thing. Doesn't affect output. 
+
+for node-1 (real gnb):
+- Need to fix the interface link between node-1 (or computer that controls real gNB) and ota-x310-1-gnb-sdr because ota-x310-1-gnb-sdr uses only IP address 192.168.40.2. The network interface subnet is 10.10.2.1 by default but should be changed with: "sudo ifconfig eno2 192.168.40.1  netmask 255.255.255.0". After that, you can ping the radio to test connectivity.
+- can look for problems with command uhd_usrp_probe
+- for real gnb use: "sudo /var/tmp/oairan/cmake_targets/ran_build/build/nr-softmodem -E   -O /local/repository/etc/gnb.sa.band78.fr1.106PRB.usrpx310.conf --sa", but first you have to change to appropriate interface TODO make
+- the UHD driver was messed up on 3.15 instead of UHD4, but it piped out 2 commands you have to run to fix this. It then requires power-cycling the sdr on the powder UI, but all these instructions are stated. After this, it works.
+- have to run "sudo ifconfig eno2 mtu 9000" but with the right iface as a startup script is currently misconfigured and adjusts mtu for the other interface to cn, not to sdr. This should be fixed to stop needing to do this.
+
+
+for cots-ue (ota-nuc1-cots-ue):
+- first use AT commands to switch device between airplane mode / connecitivity on with `sudo minicom -D /dev/ttyUSB2` and then type "at+cfun=1" and enter for on, and =4 for airplane mode (need to do this repeatedly in order to more quickly reconnect with gnb, though it auto connects either way eventually)
+- then can run sudo quectel-CM -s oai -4 to start connection manager which will create a network interface if PDU session successful.
+
+
+MAKE SURE YOU DON'T OVERWRITE cp.yaml and upf.yaml if restarting them as had to mess with sst, sd in both of them to get things working. 
+
+
+Log of successful ue connection and pdu session:
+[08-09_22:42:26:003] requestRegistrationState2 MCC: 999, MNC: 99, PS: Detached, DataCap: UNKNOW
+[08-09_22:42:26:259] requestRegistrationState2 MCC: 999, MNC: 99, PS: Attached, DataCap: 5G_SA
+[08-09_22:42:26:643] requestSetupDataCall WdsConnectionIPv4Handle: 0x7b53c930
+[08-09_22:42:26:772] change mtu 1500 -> 1358
+[08-09_22:42:26:772] ifconfig wwp0s20f0u4i4 up
+[08-09_22:42:26:775] busybox udhcpc -f -n -q -t 5 -i wwp0s20f0u4i4
+udhcpc: started, v1.27.2
+udhcpc: sending discover
+udhcpc: sending discover
+udhcpc: sending discover
+udhcpc: sending discover
+udhcpc: sending discover
+[08-09_22:42:41:971] /etc/udhcpc/default.script: Lease failed:
+udhcpc: no lease, failing
+[08-09_22:42:41:991] File:ql_raw_ip_mode_check Line:137 udhcpc fail to get ip address, try next:
+[08-09_22:42:41:991] ifconfig wwp0s20f0u4i4 down
+[08-09_22:42:41:994] echo Y > /sys/class/net/wwp0s20f0u4i4/qmi/raw_ip
+[08-09_22:42:41:994] ifconfig wwp0s20f0u4i4 up
+[08-09_22:42:41:997] busybox udhcpc -f -n -q -t 5 -i wwp0s20f0u4i4
+udhcpc: started, v1.27.2
+udhcpc: sending discover
+udhcpc: sending select for 12.1.1.121
+udhcpc: lease of 12.1.1.121 obtained, lease time 7200

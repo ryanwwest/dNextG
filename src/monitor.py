@@ -3,8 +3,6 @@ import sys
 import time
 from api_client import D5gBlockchainClient
 import datetime
-import random
-from templater import get_node_number, get_num_decentralized_nodes
 
 host_name = "0.0.0.0"
 api_http_url = "http://127.0.0.1:8008"
@@ -17,17 +15,16 @@ pk = None
 vk = None
 epic_history = {0: 0}
 
+def get_node_number():
+    hostname = subprocess.getoutput("hostname -s")
+    return int(hostname[-1])
+
 # Returns True if a simulated UE can successfully connect to the internet with HTTPS via a specific node's UPF.
 def node_upf_connection_ok(nodeid, print_output=False):
     if print_output:
         print(f"Starting UE and testing connection through node-{nodeid} UPF, please wait...")
     test_cmd = f"cd /local/repository/bin && sudo bash testupf.sh {nodeid}"  # /local/repository/etc/ue-node{nodeid}.conf"
-    try: 
-        test_result = subprocess.run(test_cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=100)
-    except Exception as e:
-        print(e)
-        print(f"node-{nodeid} upf connection FAILED, timeout exceeded")
-        return False
+    test_result = subprocess.run(test_cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
     is_verified = True if test_result.returncode == 0 else False
     if not print_output:
         return is_verified
@@ -40,12 +37,12 @@ def node_upf_connection_ok(nodeid, print_output=False):
 
 # todo should send all reports in one txn, not one txn per node
 # todo support upf testing gnb
-def test_and_report_node_upfs(nodeids, block_num):
+def test_and_report_node_upfs(nodeids): 
     global vk
     debug_skip = False  # purely for debugging to quickly create txn
     if debug_skip:
         print("sending mock debug transaction")
-        debug_txn_payload = {"nid": get_node_number(), "tested_nodes": {nid: True for nid in nodeids}, "seedblock": block_num, "timestamp": datetime.datetime.now().isoformat() }
+        debug_txn_payload = {"tested_nodes": {nid: True for nid in nodeids}}
         cli = D5gBlockchainClient(api_http_url, private_key_file)
         cli.send_transaction(debug_txn_payload)
         print(debug_txn_payload, "sent to api (should forward to tp)")
@@ -53,77 +50,41 @@ def test_and_report_node_upfs(nodeids, block_num):
     test_results = {}
     # todo parallelize testing multiple other nodes at once
     for nid in nodeids:
-        retries = 2
+        retries = 1
         node_verified = False
         while retries >= 0:
-            time.sleep(12)  # might help with node's gNB not accepting connections immediately after ended
+            time.sleep(7)  # might help with node's gNB not accepting connections immediately after ended
             node_verified = node_upf_connection_ok(nid, print_output=True)
             # node_verified = True  # enable and comment out above line to bypass testing other nodes
             if node_verified:
                 break
             retries -= 1
         test_results[nid] = node_verified
-
+    
     if len(test_results) > 0:
         # only send reports for tested nodes
-        txn_payload = { 
-            "nid": get_node_number(),
-            "tested_nodes": test_results,
-            "seedblock": block_num,
-            "timestamp": datetime.datetime.now().isoformat()
-        }
+        txn_payload = { "tested_nodes": test_results, "timestamp": datetime.datetime.now().isoformat() }
         print(txn_payload)
-        try: 
-            cli = D5gBlockchainClient(api_http_url, private_key_file)
-            out = cli.send_transaction(txn_payload)
-        except Exception as e:
-            print("Error: could not submit transaction to blockchain", e)
-            return txn_payload
+        cli = D5gBlockchainClient(api_http_url, private_key_file)
+        out = cli.send_transaction(txn_payload)
     else:
         raise Exception("No nodes were tested.")
     # caveat: if txn is rejected, this won't be updated
     return txn_payload
 
-def get_current_block_num_hash():
-    try:
-        cli = D5gBlockchainClient(api_http_url, private_key_file)
-        lb = cli.get_latest_block()
-        print("current block num:", lb['header']['block_num'])
-        print("current block hash:", lb['header']['state_root_hash'])
-        return lb['header']['block_num'], lb['header']['state_root_hash']
-    except Exception as e:
-        print("error getting the latest block, so using default block 0, hash 0. Error:", e)
-        return 0, 0
-
-
-def get_verifiably_random_test_nodes(block_hash_seed, num_decentralized_nodes, this_nid):
-    # this allows the random stream to be reproduced by others; includes this nid to avoid the same set across nodes
-    random.seed(str(block_hash_seed) + str(this_nid)) 
-    num_nodes_to_test_per_epic = 3 # cannot be more than 3 globally since minimum nodes in cluster is 4
-    # all decentralized nodes besides this node are candidates for testing
-    candidate_nids = list(range(1,num_decentralized_nodes+1))
-    candidate_nids.remove(this_nid)
-    # randomize the order of the candidates, then return the first X
-    random.shuffle(candidate_nids)
-    return candidate_nids[:num_nodes_to_test_per_epic]
-    return list(map(str,candidate_nids[:num_nodes_to_test_per_epic]))
 
 def monitor_up_traffic():
-    epic = 1
+    epic = 1 
     this_node_id = get_node_number()
-    node_count = get_num_decentralized_nodes()
-    last_block_num = 0
     while True:
-        block_num, block_hash = get_current_block_num_hash()
-        if int(last_block_num) == int(block_num):
-            print(f"Warning: latest block number {block_num} has not changed - blockchain may not be updating")
-        nodeids = get_verifiably_random_test_nodes(block_hash, node_count, this_node_id)
-        print(f"there are {node_count} nodes, will test this set of nodes: {nodeids}")
+        # todo allow arbitrary # nodes (but then design issue of n^2 messaging when
+        #     scaling so maybe only do partial reputation reports then)
+        nodeids = [1,2,3,4]  
+        nodeids.remove(this_node_id)
         print(f"epoch: {epic} (host node and gNB: {this_node_id})")
-        results = test_and_report_node_upfs(nodeids, block_num)
+        results = test_and_report_node_upfs(nodeids)
         epic_history[epic] = results
         epic += 1
-        last_block_num = block_num
         time.sleep(180)
 
 if __name__ == "__main__":

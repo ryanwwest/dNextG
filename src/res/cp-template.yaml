@@ -22,7 +22,7 @@ services:
                 ipv4_address: 192.168.70.131
     oai-udr:
         container_name: oai-udr
-        image: rdefosseoai/oai-udr:develop
+        image: oai-udr:latest
         environment:
             - TZ=Europe/Paris
             - INSTANCE=0
@@ -50,7 +50,7 @@ services:
             retries: 5
     oai-udm:
         container_name: oai-udm
-        image: rdefosseoai/oai-udm:develop
+        image: oai-udm:latest
         environment:
             - TZ=Europe/Paris
             - INSTANCE=0
@@ -78,7 +78,7 @@ services:
             retries: 5
     oai-ausf:
         container_name: oai-ausf
-        image: rdefosseoai/oai-ausf:develop
+        image: oai-ausf:latest
         environment:
             - TZ=Europe/Paris
             - INSTANCE_ID=0
@@ -105,7 +105,7 @@ services:
             retries: 5
     oai-nrf:
         container_name: "oai-nrf"
-        image: rdefosseoai/oai-nrf:develop
+        image: oai-nrf:latest
         ports:
                 - "8099:80"
         environment:
@@ -127,7 +127,7 @@ services:
             retries: 5
     oai-amf:
         container_name: "oai-amf"
-        image: rdefosseoai/oai-amf:develop   # oai-amf:latest
+        image: oai-amf:latest
         ports:
             - "8805:8805"
             - "38412:38412/sctp"
@@ -154,7 +154,7 @@ services:
             - SST_0=222
             - SD_0=123
             - SST_1=1
-            - SD_1=1
+            - SD_1=12
             - AMF_INTERFACE_NAME_FOR_NGAP=eth0
             - AMF_INTERFACE_NAME_FOR_N11=eth0
             - SMF_INSTANCE_ID_0=1
@@ -200,7 +200,7 @@ services:
                 ipv4_address: 192.168.70.132
     oai-smf:
         container_name: "oai-smf"
-        image: gitlab.flux.utah.edu:4567/mugahed/smf-repo/oai-smf:ryan-dashed-dnn
+        image: oai-smf:latest
         environment:
             - TZ=Europe/Paris
             - INSTANCE=0
@@ -229,13 +229,32 @@ services:
             - REGISTER_NRF=yes
             - DISCOVER_UPF=yes
             - USE_FQDN_DNS=no
+            - TYPE3=IPv4  # other types are already this by default: see https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-smf/-/blob/v1.3.0/scripts/entrypoint.sh     
+              # node 1                                                                                                                                           
+            - DNN_NI0=adnn                                                                                                                                       
+            - DNN_RANGE0=12.1.1.2 - 12.1.1.60                                                                                                                    
+            - NSSAI_SST0=1                                                                                                                                       
+            - NSSAI_SD0=1                                                                                                                                        
+              # node 2                                                                                                                                           
+            - DNN_NI1=bdnn                                                                                                                                       
+            - DNN_RANGE1=12.1.1.61 - 12.1.1.120                                                                                                                  
+            - NSSAI_SST1=2                                                                                                                                       
+            - NSSAI_SD1=2                                                                                                                                        
+              # node 3                                                                                                                                           
+            - DNN_NI2=cdnn                                                                                                                                       
+            - DNN_RANGE2=12.1.1.121 - 12.1.1.180                                                                                                                 
+            - NSSAI_SST2=3                                                                                                                                       
+            - NSSAI_SD2=3                                                                                                                                        
+              # node 4                                                                                                                                           
+            - DNN_NI3=ddnn                                                                                                                                       
+            - DNN_RANGE3=12.1.1.181 - 12.1.1.224                                                                                                                 
+            - NSSAI_SST3=4                                                                                                                                       
+            - NSSAI_SD3=4                                                                                                                                        
         depends_on:
             - oai-nrf
             - oai-amf
         volumes:
             - ./smf-healthcheck.sh:/openair-smf/bin/smf-healthcheck.sh
-            - /local/repository/etc/smf.conf:/tmp/smf.conf
-        command: bash -c 'cp /tmp/smf.conf /openair-smf/etc/smf.conf && /bin/bash /openair-smf/bin/entrypoint.sh /openair-smf/bin/oai_smf -c /openair-smf/etc/smf.conf -o' # ugly way of copying in a custom smf.conf from /local/repository/etc/smf.conf so that file can add as many DNNs for number of d5g nodes as needed without modification of this docker-compose file.
         healthcheck:
             test: /bin/bash -c "/openair-smf/bin/smf-healthcheck.sh"
             interval: 10s

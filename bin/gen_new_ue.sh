@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#// missing 3 digits at end, start with 032
+// missing 3 digits at end, start with 032
 COMMON_IMSI_START="20895"
 
 ueconfigpath=$1
@@ -21,13 +21,11 @@ imsi+=$(tr -dc 0-9 < /dev/urandom | head -c 10)
 key=$(tr -dc A-F0-9 < /dev/urandom | head -c 32)
 opc=$(tr -dc a-f0-9 < /dev/urandom | head -c 32)
 
-#dnn="$(echo $nodenum | tr '[1-9]' '[a-j]')dnn"
-dnn="dnn$nodenum"
-# previously was $nodenum, but maybe this doesn't matter?
-sst=1
-sd=1
+dnn="$(echo $nodenum | tr '[1-9]' '[a-j]')dnn"
+sst=$nodenum
+sd=$nodenum
 
-#TODO probably update sqn each time
+#TODO probably update sqn each time after I know what it is
 sqncmd='{"sqn": "000000000020", "sqnScheme": "NON_TIME_BASED", "lastIndexes": {"ausf": 0}}'
 sqlcmd="INSERT INTO AuthenticationSubscription (ueid, authenticationMethod, encPermanentKey, protectionParameterId, sequenceNumber, authenticationManagementField, algorithmId, encOpcKey, encTopcKey, vectorGenerationInHss, n5gcAuthMethod, rgAuthenticationInd, supi) VALUES ('$imsi', '5G_AKA', '$key', '$key', '$sqncmd', '8000', 'milenage', '$opc', NULL, NULL, NULL, NULL, '$imsi');"
 

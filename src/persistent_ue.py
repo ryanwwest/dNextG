@@ -107,7 +107,7 @@ def record_connection_data(attempts_data):
 
 # Will request each site every X seconds where X is frequency in seconds.
 # Technically > X seconds since starts counting after all requests complete
-# This also saves the data to a pickle
+# This also saves the data to a pickle and creates a matplotlib graph figure
 def send_pdu_traffic_thread(pdu_iface, frequency, sites):
     # the PDU interface is by default oaitun_ueX where X is 1 unless multiple
     # UEs and PDU sessions are on the same machine concurrently.
@@ -221,7 +221,7 @@ def fetch_network_state(info_source_nodes, pdu_iface, gnb_node_num, cur_upf):
 
     return rj, lj
 
-# use the dNextG blockchain state and latency information to choose the best network path for the UE
+# use the DNextG blockchain state and latency information to choose the best network path for the UE
 # pdu_iface: what linux network interface to use for PDU session connection
 # info_source_nodes: list of node ids (nids) to redundantly check for blockchain/latency info. more
 #     checks gives greater confidence (could catch a lying node)

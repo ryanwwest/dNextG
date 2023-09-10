@@ -29,21 +29,19 @@ if [ $# -eq 0 ]
       ue_conf_filepath=$ue_existing_conf_filepath
     else
       # if arg is a number, it specifies node number of UE config to route through
-      echo "requesting core plane node to generate/register a UE config to test node $1's UPF:"
+      echo "requesting core plane node to generate/register a UE config:"
       sudo bash ./add-ue-to-cp.sh $ue_conf_filepath $1
     fi
 fi
 
 # start ue using config
 cd $ue_binary_path
-sudo RFSIMULATOR=127.0.0.1 ./ran_build/build/nr-uesoftmodem -r 106 --numerology 1 --band 78 -C 3619200000 --rfsim --sa --nokrnmod -O $ue_conf_filepath > /tmp/lastuetest.log 2>&1 &
+sudo RFSIMULATOR=127.0.0.1 ./ran_build/build/nr-uesoftmodem -r 106 --numerology 1 --band 78 -C 3619200000 --rfsim --sa --nokrnmod -O $ue_conf_filepath > /dev/null 2>&1 &
 ue_pid=$!
 
 # works for 10 sometimes, but not always. Never works with 5 seconds
-sleep 40
+sleep 15
 
-# have to update config or else default route wil be wrong and fail even if connectivity works
-sudo sed -i 's/^desired_default_route=.*$/desired_default_route=12.1.'"$1"'.1/g' $altnetworking_cfg
 # couldn't figure out better way to get results than put in file and read from file...
 sudo /z/altnetworking/altnetworking.sh $altnetworking_cfg bash -c 'echo '' | openssl s_client -brief -connect google.com:443' &> $tls_results_file
 
