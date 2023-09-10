@@ -1,0 +1,54 @@
+version: '3.8'                                                                    
+services:                                                                         
+    autoheal: # necessary to restart unhealthy spgwu because docker only manually does this in docker swarm (not compose). Do not do this in production, security risks.
+      restart: always
+      image: willfarrell/autoheal
+      environment:
+        - AUTOHEAL_CONTAINER_LABEL=all
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock 
+    oai-spgwu:                                                                    
+        container_name: "oai-spgwu"                                               
+        image: oai-spgwu-tiny:latest                                              
+        environment:                                                              
+            - TZ=Europe/Paris                                                     
+            - PID_DIRECTORY=/var/run                                              
+            - SGW_INTERFACE_NAME_FOR_S1U_S12_S4_UP={{cp-network-interface}}       
+            - SGW_INTERFACE_NAME_FOR_SX={{cp-network-interface}}                  
+            - PGW_INTERFACE_NAME_FOR_SGI={{cp-network-interface}}                 
+            - NETWORK_UE_NAT_OPTION=yes                                           
+            - NETWORK_UE_IP=12.1.{{decentralized-node-number}}.0/24                                           
+            - SPGWC0_IP_ADDRESS={{upf-ip-address}}                                
+            - BYPASS_UL_PFCP_RULES=no                                             
+            - MCC=208                                                             
+            - MNC=95                                                              
+            - MNC03=095                                                           
+            - TAC=40960                                                           
+            - GW_ID=1                                                             
+            - REALM=openairinterface.org                                          
+            - ENABLE_5G_FEATURES=yes                                              
+            - REGISTER_NRF=yes                                                    
+            - USE_FQDN_NRF=no                                                     
+            - UPF_FQDN_5G={{upf-ip-address}} # maybe unnecessary?                 
+            - NRF_IPV4_ADDRESS={{cp-ip-address}}                                  
+            - NRF_PORT=8099                                                       
+            - NRF_API_VERSION=v1                                                  
+            - NRF_FQDN=oai-nrf                                                    
+            - NSSAI_SST_0=1
+            - NSSAI_SD_0=1
+            - DNN_0={{upf-dnn}}                                                       
+        cap_add:                                                                  
+            - NET_ADMIN                                                           
+            - SYS_ADMIN                                                           
+        cap_drop:                                                                 
+            - ALL                                                                 
+        privileged: true                                                          
+        volumes:                                                                  
+            - /local/repository/etc/spgwu-healthcheck.sh:/openair-spgwu-tiny/bin/spgwu-healthcheck.sh 
+        restart: always
+        healthcheck:                                                              
+            test: /bin/bash -c "/openair-spgwu-tiny/bin/spgwu-healthcheck.sh"     
+            interval: 25s                                                         
+            timeout: 15s   # adjusted up so cat to read sgpwu logs for missing nrf healthcheck log has time to appear 
+            retries: 2                                                            
+        network_mode: host                                                        
