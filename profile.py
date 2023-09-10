@@ -72,7 +72,7 @@ If you want to experiment with an automatically configured setup, use the `maste
 """
 
 tourInstructions = """
-Node 0 is the centralizzed node running the 5G Core, and all remaining nodes are decentralized nodes running gNBs, UPFs, and dNextG processes. When the paper was submitted for publication in 2023-06, this POWDER experiment would automatically run scripts `bin/install-5g.sh` and `bin/install-sawtooth.sh` which installed the 5G core on node 0, UPFs and gNBs and Sawtooth validators on all remaining nodes, and automatically started and connected all of these processes together and started the dNextG reputation system. As OAI and Hyperledger frequently update their software versions/URLs, these scripts are prone to breakage with time and may need tweaks - the output logs of these automatically-run scripts are found in the home directory.
+Node 0 is the centralized node running the 5G Core, and all remaining nodes are decentralized nodes running gNBs, UPFs, and dNextG processes. When the paper was submitted for publication in 2023-06, this POWDER experiment would automatically run scripts `bin/install-5g.sh` and `bin/install-sawtooth.sh` which installed the 5G core on node 0, UPFs and gNBs and Sawtooth validators on all remaining nodes, and automatically started and connected all of these processes together and started the dNextG reputation system. As OAI and Hyperledger frequently update their software versions/URLs, these scripts are prone to breakage with time and may need tweaks - the output logs of these automatically-run scripts are found in the home directory.
 
 The easiest way to check the dNextG reputation state (on the Hyperledger Sawtooth ledger) is by running the following command on any decentralized node (any node except node-0):
 ```
@@ -133,7 +133,7 @@ After setup is complete, helpful commands:
 
 # Known Issues 
 
-- It is unlikely but possible that the AMF and/or SMF can potentially stop processing traffic after 1+. Restarting node 0's core control plane using the above command fixes it. Note that the gNB command used above will automatically handle reconnecting each gNB to the core, but the UPF (spgwu) command may not always automatically reconnect, so restarting each UPF node using the above command is also required.
+- It is unlikely but possible that the AMF and/or SMF can potentially stop processing traffic after 1+ hours. Restarting node 0's core control plane using the above command fixes it. Note that the gNB command used above will automatically handle reconnecting each gNB to the core, but the UPF (spgwu) command may not always automatically reconnect, so restarting each UPF node using the above command is also required.
 - The persistent-ue.py 'real UE' simulation OAI UE starting thread may occasionally hang and need restarting (or waiting for a few minutes). Cause not yet identified.
 - On very rare occasions, one or more nodes lose Sawtooth ledger consensus (only observed after 800+ blocks). The simplest fix is usually rerunning the "Sawtooth PBFT Steps" which wipes the ledger, though you can attempt to reconnect the out-of-sync node if you desire to maintain the ledger state.
 - node-0 (and other nodes) has a small disk space which fills up from logs (check current usage with `df`). If this happens, you can clear disk space with the below command, then restart the control plane VNFs using the 'helpful command' above.
